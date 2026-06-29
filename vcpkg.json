@@ -1,0 +1,7 @@
+{
+  "name": "elephants",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "sfml"
+  ]
+}

@@ -4,6 +4,7 @@
 #include "Elephants/Simulation.hpp"
 
 #include <SFML/Graphics/RenderWindow.hpp>
+#include <SFML/Window/Keyboard.hpp>
 
 namespace elephants {
 
@@ -16,6 +17,8 @@ public:
 private:
     void handleEvents();
     void handleKeyPressed(sf::Keyboard::Key key);
+    void handleKeyReleased(sf::Keyboard::Key key);
+    void refreshSpeedMode();
     void update(float dt);
     void render();
     void refreshWindowTitle();
@@ -24,6 +27,10 @@ private:
     Simulation simulation_;
     Renderer renderer_;
     bool paused_ = false;
+    bool leftShiftHeld_ = false;
+    bool rightShiftHeld_ = false;
+    bool fastToggled_ = false;
+    bool fastToggleKeyHeld_ = false;
     float titleRefreshTimer_ = 0.0F;
 };
 

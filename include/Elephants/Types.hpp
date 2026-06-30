@@ -13,6 +13,11 @@ enum class TerrainType {
     Swamp,
 };
 
+enum class HerdSpeedMode {
+    Slow,
+    Fast,
+};
+
 struct HexCoord {
     int q = 0;
     int r = 0;
@@ -40,10 +45,13 @@ struct Tile {
 };
 
 struct Herd {
+    HexCoord previousCenter{};
     HexCoord center{};
     HexCoord direction{1, 0};
     float size = 6.0F;
     float hunger = 1.0F;
+    float moveProgress = 1.0F;
+    HerdSpeedMode speedMode = HerdSpeedMode::Slow;
 };
 
 } // namespace elephants

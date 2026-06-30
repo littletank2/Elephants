@@ -19,6 +19,8 @@ struct SimulationConfig {
     int mapRadius = 15;
     float hexSize = 23.0F;
     float tickSeconds = 0.22F;
+    float fastTickSeconds = 0.10F;
+    float fastModeFoodRatio = 0.0F;
 
     float baseConsumptionPerElephant = 0.42F;
     float herdGrowthFoodThreshold = 0.84F;
@@ -54,11 +56,13 @@ public:
     void reset();
     void update(float dt);
     void setDirection(HexCoord direction);
+    void setSpeedMode(HerdSpeedMode mode);
 
     [[nodiscard]] const HexGrid& grid() const;
     [[nodiscard]] const std::vector<Tile>& tiles() const;
     [[nodiscard]] const Herd& herd() const;
     [[nodiscard]] GameResult result() const;
+    [[nodiscard]] HerdSpeedMode speedMode() const;
     [[nodiscard]] SimulationStats stats() const;
     [[nodiscard]] std::string statusText() const;
     [[nodiscard]] bool isPassable(HexCoord coord) const;
@@ -70,6 +74,7 @@ private:
     void step();
     void moveHerd();
     void feedHerd();
+    void applyFoodRatio(float foodRatio);
     void regenerateTiles();
     void updateResult();
 
@@ -77,6 +82,7 @@ private:
     [[nodiscard]] float maxVegetation(const Tile& tile) const;
     [[nodiscard]] float growthRate(const Tile& tile) const;
     [[nodiscard]] float foodAccessibility(const Tile& tile) const;
+    [[nodiscard]] float currentTickSeconds() const;
     [[nodiscard]] std::vector<HexCoord> footprintFor(const Herd& herd) const;
 
     SimulationConfig config_;

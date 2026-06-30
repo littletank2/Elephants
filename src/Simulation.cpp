@@ -51,10 +51,14 @@ void Simulation::update(float dt) {
     }
 
     accumulator_ += dt;
-    while (accumulator_ >= config_.tickSeconds) {
+    float stepSeconds = currentTickSeconds();
+    while (accumulator_ >= stepSeconds) {
         step();
-        accumulator_ -= config_.tickSeconds;
+        accumulator_ -= stepSeconds;
+        stepSeconds = currentTickSeconds();
     }
+
+    herd_.moveProgress = std::clamp(accumulator_ / std::max(0.001F, stepSeconds), 0.0F, 1.0F);
 }
 
 void Simulation::setDirection(HexCoord direction) {
@@ -62,6 +66,10 @@ void Simulation::setDirection(HexCoord direction) {
     if (std::find(dirs.begin(), dirs.end(), direction) != dirs.end()) {
         herd_.direction = direction;
     }
+}
+
+void Simulation::setSpeedMode(HerdSpeedMode mode) {
+    herd_.speedMode = mode;
 }
 
 const HexGrid& Simulation::grid() const {
@@ -78,6 +86,10 @@ const Herd& Simulation::herd() const {
 
 GameResult Simulation::result() const {
     return result_;
+}
+
+HerdSpeedMode Simulation::speedMode() const {
+    return herd_.speedMode;
 }
 
 SimulationStats Simulation::stats() const {
@@ -115,10 +127,13 @@ std::string Simulation::statusText() const {
         state = "LOST";
     }
 
+    const char* speed = herd_.speedMode == HerdSpeedMode::Fast ? "FAST" : "SLOW";
+
     std::ostringstream stream;
     stream << state
            << " | herd " << std::fixed << std::setprecision(1) << herd_.size
            << " | hunger " << std::setprecision(0) << herd_.hunger * 100.0F << "%"
+           << " | speed " << speed
            << " | forest " << std::setprecision(1) << currentStats.forestRatio * 100.0F << "%"
            << " | veg " << std::setprecision(0) << currentStats.averageVegetation * 100.0F << "%";
     return stream.str();
@@ -153,51 +168,61 @@ void Simulation::placeHerd() {
     herd_.direction = {1, 0};
     herd_.size = config_.initialHerdSize;
     herd_.hunger = 1.0F;
+    herd_.moveProgress = 1.0F;
 
     if (isPassable({0, 0})) {
         herd_.center = {0, 0};
-        return;
+    } else {
+        const auto found = std::find_if(grid_.coords().begin(), grid_.coords().end(), [this](HexCoord coord) {
+            return isPassable(coord);
+        });
+
+        herd_.center = found != grid_.coords().end() ? *found : HexCoord{};
     }
 
-    const auto found = std::find_if(grid_.coords().begin(), grid_.coords().end(), [this](HexCoord coord) {
-        return isPassable(coord);
-    });
-
-    herd_.center = found != grid_.coords().end() ? *found : HexCoord{};
+    herd_.previousCenter = herd_.center;
 }
 
 void Simulation::step() {
     moveHerd();
-    feedHerd();
+    if (herd_.speedMode == HerdSpeedMode::Slow) {
+        feedHerd();
+    } else {
+        applyFoodRatio(config_.fastModeFoodRatio);
+    }
+
     regenerateTiles();
     updateResult();
 }
 
 void Simulation::moveHerd() {
+    const HexCoord start = herd_.center;
     const HexCoord next = herd_.center + herd_.direction;
+    HexCoord destination = start;
+
     if (isPassable(next)) {
-        herd_.center = next;
-        return;
-    }
+        destination = next;
+    } else {
+        const auto neighbors = grid_.neighbors(herd_.center);
+        float bestScore = -1.0F;
 
-    const auto neighbors = grid_.neighbors(herd_.center);
-    auto best = herd_.center;
-    float bestScore = -1.0F;
+        for (HexCoord candidate : neighbors) {
+            if (!isPassable(candidate)) {
+                continue;
+            }
 
-    for (HexCoord candidate : neighbors) {
-        if (!isPassable(candidate)) {
-            continue;
-        }
-
-        const Tile& tile = tiles_[grid_.indexOf(candidate)];
-        const float score = tile.vegetation * foodAccessibility(tile) + tile.fertility * 1.5F;
-        if (score > bestScore) {
-            bestScore = score;
-            best = candidate;
+            const Tile& tile = tiles_[grid_.indexOf(candidate)];
+            const float score = tile.vegetation * foodAccessibility(tile) + tile.fertility * 1.5F;
+            if (score > bestScore) {
+                bestScore = score;
+                destination = candidate;
+            }
         }
     }
 
-    herd_.center = best;
+    herd_.previousCenter = start;
+    herd_.center = destination;
+    herd_.moveProgress = 0.0F;
 }
 
 void Simulation::feedHerd() {
@@ -236,7 +261,11 @@ void Simulation::feedHerd() {
         }
     }
 
-    lastFoodRatio_ = clamp01(eatenTotal / std::max(0.01F, demand));
+    applyFoodRatio(eatenTotal / std::max(0.01F, demand));
+}
+
+void Simulation::applyFoodRatio(float foodRatio) {
+    lastFoodRatio_ = clamp01(foodRatio);
     herd_.hunger = clamp01(herd_.hunger * 0.84F + lastFoodRatio_ * 0.16F);
 
     if (lastFoodRatio_ >= config_.herdGrowthFoodThreshold) {
@@ -368,6 +397,11 @@ float Simulation::foodAccessibility(const Tile& tile) const {
     }
 
     return 0.0F;
+}
+
+float Simulation::currentTickSeconds() const {
+    const float configured = herd_.speedMode == HerdSpeedMode::Fast ? config_.fastTickSeconds : config_.tickSeconds;
+    return std::max(0.001F, configured);
 }
 
 std::vector<HexCoord> Simulation::footprintFor(const Herd& herd) const {

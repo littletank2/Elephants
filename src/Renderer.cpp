@@ -116,7 +116,10 @@ void Renderer::drawTiles(sf::RenderWindow& window, const Simulation& simulation,
 
 void Renderer::drawHerd(sf::RenderWindow& window, const Simulation& simulation, sf::Vector2f offset) {
     const Herd& herd = simulation.herd();
-    const sf::Vector2f center = grid_.toPixel(herd.center) + offset;
+    const sf::Vector2f previousCenter = grid_.toPixel(herd.previousCenter);
+    const sf::Vector2f currentCenter = grid_.toPixel(herd.center);
+    const float progress = std::clamp(herd.moveProgress, 0.0F, 1.0F);
+    const sf::Vector2f center = previousCenter + (currentCenter - previousCenter) * progress + offset;
     const float bodyRadius = std::clamp(9.0F + herd.size * 0.24F, 11.0F, 27.0F);
 
     sf::CircleShape shadow(bodyRadius * 1.08F);

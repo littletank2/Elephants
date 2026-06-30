@@ -35,8 +35,10 @@ void Game::handleEvents() {
             continue;
         }
 
-        if (const auto* key = event->getIf<sf::Event::KeyPressed>()) {
-            handleKeyPressed(key->code);
+        if (const auto* pressed = event->getIf<sf::Event::KeyPressed>()) {
+            handleKeyPressed(pressed->code);
+        } else if (const auto* released = event->getIf<sf::Event::KeyReleased>()) {
+            handleKeyReleased(released->code);
         }
     }
 }
@@ -44,6 +46,31 @@ void Game::handleEvents() {
 void Game::handleKeyPressed(sf::Keyboard::Key key) {
     if (key == sf::Keyboard::Key::Escape) {
         window_.close();
+        return;
+    }
+
+    if (key == sf::Keyboard::Key::LShift) {
+        leftShiftHeld_ = true;
+        refreshSpeedMode();
+        refreshWindowTitle();
+        return;
+    }
+
+    if (key == sf::Keyboard::Key::RShift) {
+        rightShiftHeld_ = true;
+        refreshSpeedMode();
+        refreshWindowTitle();
+        return;
+    }
+
+    if (key == sf::Keyboard::Key::F) {
+        if (!fastToggleKeyHeld_) {
+            fastToggled_ = !fastToggled_;
+            refreshSpeedMode();
+            refreshWindowTitle();
+        }
+
+        fastToggleKeyHeld_ = true;
         return;
     }
 
@@ -55,6 +82,7 @@ void Game::handleKeyPressed(sf::Keyboard::Key key) {
 
     if (key == sf::Keyboard::Key::R) {
         simulation_.reset();
+        refreshSpeedMode();
         paused_ = false;
         refreshWindowTitle();
         return;
@@ -73,6 +101,25 @@ void Game::handleKeyPressed(sf::Keyboard::Key key) {
     } else if (key == sf::Keyboard::Key::D) {
         simulation_.setDirection({0, 1});
     }
+}
+
+void Game::handleKeyReleased(sf::Keyboard::Key key) {
+    if (key == sf::Keyboard::Key::LShift) {
+        leftShiftHeld_ = false;
+        refreshSpeedMode();
+        refreshWindowTitle();
+    } else if (key == sf::Keyboard::Key::RShift) {
+        rightShiftHeld_ = false;
+        refreshSpeedMode();
+        refreshWindowTitle();
+    } else if (key == sf::Keyboard::Key::F) {
+        fastToggleKeyHeld_ = false;
+    }
+}
+
+void Game::refreshSpeedMode() {
+    const bool fast = leftShiftHeld_ || rightShiftHeld_ || fastToggled_;
+    simulation_.setSpeedMode(fast ? HerdSpeedMode::Fast : HerdSpeedMode::Slow);
 }
 
 void Game::update(float dt) {

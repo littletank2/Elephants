@@ -1,4 +1,4 @@
-v#include "Elephants/HexGrid.hpp"
+#include "Elephants/HexGrid.hpp"
 #include "Elephants/Simulation.hpp"
 
 #include <algorithm>
@@ -19,6 +19,23 @@ void require(bool condition, const char* message) {
 
 bool nearlyEqual(float left, float right, float epsilon = 0.001F) {
     return std::abs(left - right) <= epsilon;
+}
+
+elephants::HexCoord directionBetween(elephants::HexCoord from, elephants::HexCoord to) {
+    return {to.q - from.q, to.r - from.r};
+}
+
+bool choosePassableNeighborDirection(elephants::Simulation& simulation, elephants::HexCoord& destination) {
+    const elephants::HexCoord start = simulation.herd().center;
+    for (elephants::HexCoord candidate : simulation.grid().neighbors(start)) {
+        if (simulation.isPassable(candidate)) {
+            destination = candidate;
+            simulation.setDirection(directionBetween(start, candidate));
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void testHexGridRadiusAndNeighbors() {
@@ -112,6 +129,65 @@ void testHerdFootprintScalesWithSize() {
     require(largeSimulation.herdFootprint().size() > 1, "large herd affects a wider front");
 }
 
+void testFastModeMovesWithoutEatingGrass() {
+    elephants::SimulationConfig config{};
+    config.mapRadius = 6;
+    config.fastTickSeconds = 0.01F;
+    config.initialHerdSize = 8.0F;
+    config.victoryForestRatio = -1.0F;
+
+    elephants::Simulation simulation(config);
+    elephants::HexCoord destination{};
+    require(choosePassableNeighborDirection(simulation, destination), "test map has a passable neighboring cell");
+
+    const elephants::HexCoord start = simulation.herd().center;
+    const auto beforeTiles = simulation.tiles();
+    const float hungerBefore = simulation.herd().hunger;
+    const float sizeBefore = simulation.herd().size;
+
+    simulation.setSpeedMode(elephants::HerdSpeedMode::Fast);
+    require(simulation.speedMode() == elephants::HerdSpeedMode::Fast, "fast speed mode is accepted");
+
+    simulation.update(config.fastTickSeconds);
+
+    require(simulation.herd().previousCenter == start, "fast movement records the previous center");
+    require(simulation.herd().center == destination, "fast movement advances to the selected passable neighbor");
+    require(simulation.herd().moveProgress >= 0.0F && simulation.herd().moveProgress <= 1.0F, "fast movement progress is normalized");
+    require(nearlyEqual(simulation.stats().herdFoodRatio, 0.0F), "fast movement reports no eaten food");
+    require(simulation.herd().hunger < hungerBefore, "fast movement lowers hunger when no food is eaten");
+    require(simulation.herd().size < sizeBefore, "fast movement applies starvation pressure");
+
+    for (std::size_t index = 0; index < beforeTiles.size(); ++index) {
+        const elephants::Tile& before = beforeTiles[index];
+        const elephants::Tile& after = simulation.tiles()[index];
+        require(after.vegetation + 0.001F >= before.vegetation, "fast movement does not consume vegetation");
+        require(after.manure <= before.manure + 0.001F, "fast movement does not add manure from feeding");
+    }
+}
+
+void testHerdMovementProgressInterpolatesBetweenSteps() {
+    elephants::SimulationConfig config{};
+    config.mapRadius = 6;
+    config.tickSeconds = 0.50F;
+    config.initialHerdSize = 8.0F;
+    config.victoryForestRatio = -1.0F;
+
+    elephants::Simulation simulation(config);
+    elephants::HexCoord destination{};
+    require(choosePassableNeighborDirection(simulation, destination), "test map has a passable neighboring cell");
+
+    const elephants::HexCoord start = simulation.herd().center;
+    simulation.update(config.tickSeconds);
+
+    require(simulation.herd().previousCenter == start, "movement records the previous center");
+    require(simulation.herd().center == destination, "movement advances to the selected passable neighbor");
+    require(nearlyEqual(simulation.herd().moveProgress, 0.0F), "movement progress resets after a logical step");
+
+    simulation.update(config.tickSeconds * 0.5F);
+    require(simulation.herd().center == destination, "partial update does not advance another logical step");
+    require(nearlyEqual(simulation.herd().moveProgress, 0.5F), "movement progress advances between logical steps");
+}
+
 void testVictoryThresholdCanEndGame() {
     elephants::SimulationConfig config{};
     config.mapRadius = 4;
@@ -139,6 +215,8 @@ int main() {
         {"Direction validation", testDirectionValidation},
         {"Update consumes food and keeps invariants", testUpdateConsumesFoodAndKeepsInvariants},
         {"Herd footprint scales with size", testHerdFootprintScalesWithSize},
+        {"Fast mode moves without eating grass", testFastModeMovesWithoutEatingGrass},
+        {"Herd movement progress interpolates between steps", testHerdMovementProgressInterpolatesBetweenSteps},
         {"Victory threshold can end game", testVictoryThresholdCanEndGame},
     };
 

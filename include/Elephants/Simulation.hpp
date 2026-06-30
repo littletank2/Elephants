@@ -21,6 +21,8 @@ struct SimulationConfig {
     float tickSeconds = 0.22F;
     float fastTickSeconds = 0.10F;
     float fastModeFoodRatio = 0.0F;
+    float herdStepDistance = 39.8F;
+    float herdTurnRadians = 0.5235988F;
 
     float baseConsumptionPerElephant = 0.42F;
     float herdGrowthFoodThreshold = 0.84F;
@@ -57,6 +59,7 @@ public:
     void update(float dt);
     void setDirection(HexCoord direction);
     void setSpeedMode(HerdSpeedMode mode);
+    void setMovementInput(bool forward, bool backward, bool turnLeft, bool turnRight);
 
     [[nodiscard]] const HexGrid& grid() const;
     [[nodiscard]] const std::vector<Tile>& tiles() const;
@@ -83,7 +86,11 @@ private:
     [[nodiscard]] float growthRate(const Tile& tile) const;
     [[nodiscard]] float foodAccessibility(const Tile& tile) const;
     [[nodiscard]] float currentTickSeconds() const;
-    [[nodiscard]] std::vector<HexCoord> footprintFor(const Herd& herd) const;
+    [[nodiscard]] std::vector<HexCoord> footprintFor(const sf::Vector2f& position) const;
+    [[nodiscard]] float bodyRadiusFor(const Herd& herd) const;
+    [[nodiscard]] float tileCoverageWeight(HexCoord coord, const sf::Vector2f& position, float bodyRadius) const;
+    [[nodiscard]] static float normalizeAngle(float angle);
+    [[nodiscard]] sf::Vector2f headingVector() const;
 
     SimulationConfig config_;
     HexGrid grid_;
@@ -93,6 +100,10 @@ private:
     float accumulator_ = 0.0F;
     float lastFoodRatio_ = 1.0F;
     std::mt19937 rng_;
+    bool forwardHeld_ = false;
+    bool backwardHeld_ = false;
+    bool turnLeftHeld_ = false;
+    bool turnRightHeld_ = false;
 };
 
 } // namespace elephants

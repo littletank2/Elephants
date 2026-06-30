@@ -1,5 +1,6 @@
 #include "Elephants/HexGrid.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -11,6 +12,30 @@ constexpr float sqrt3 = 1.7320508075688772F;
 int axialDistanceFromOrigin(HexCoord coord) {
     const int s = -coord.q - coord.r;
     return (std::abs(coord.q) + std::abs(coord.r) + std::abs(s)) / 2;
+}
+
+HexCoord roundAxial(float q, float r) {
+    const float x = q;
+    const float z = r;
+    const float y = -x - z;
+
+    int rx = static_cast<int>(std::round(x));
+    int ry = static_cast<int>(std::round(y));
+    int rz = static_cast<int>(std::round(z));
+
+    const float xDiff = std::abs(static_cast<float>(rx) - x);
+    const float yDiff = std::abs(static_cast<float>(ry) - y);
+    const float zDiff = std::abs(static_cast<float>(rz) - z);
+
+    if (xDiff > yDiff && xDiff > zDiff) {
+        rx = -ry - rz;
+    } else if (yDiff > zDiff) {
+        ry = -rx - rz;
+    } else {
+        rz = -rx - ry;
+    }
+
+    return {rx, rz};
 }
 
 } // namespace
@@ -64,6 +89,12 @@ sf::Vector2f HexGrid::toPixel(HexCoord coord) const {
     const float x = hexSize_ * sqrt3 * (static_cast<float>(coord.q) + static_cast<float>(coord.r) / 2.0F);
     const float y = hexSize_ * 1.5F * static_cast<float>(coord.r);
     return {x, y};
+}
+
+HexCoord HexGrid::fromPixel(sf::Vector2f pixel) const {
+    const float q = (sqrt3 / 3.0F * pixel.x - pixel.y / 3.0F) / hexSize_;
+    const float r = (2.0F / 3.0F * pixel.y) / hexSize_;
+    return roundAxial(q, r);
 }
 
 std::array<HexCoord, 6> HexGrid::neighbors(HexCoord coord) const {

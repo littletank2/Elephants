@@ -92,25 +92,24 @@ void Game::handleKeyPressed(sf::Keyboard::Key key) {
     if (key == sf::Keyboard::Key::R) {
         simulation_.reset();
         refreshSpeedMode();
+        refreshMovementInput();
         refreshMapRenderMode();
         paused_ = false;
         refreshWindowTitle();
         return;
     }
 
-    if (key == sf::Keyboard::Key::E) {
-        simulation_.setDirection({1, 0});
-    } else if (key == sf::Keyboard::Key::W) {
-        simulation_.setDirection({1, -1});
-    } else if (key == sf::Keyboard::Key::Q) {
-        simulation_.setDirection({0, -1});
-    } else if (key == sf::Keyboard::Key::A) {
-        simulation_.setDirection({-1, 0});
+    if (key == sf::Keyboard::Key::W) {
+        forwardHeld_ = true;
     } else if (key == sf::Keyboard::Key::S) {
-        simulation_.setDirection({-1, 1});
+        backwardHeld_ = true;
+    } else if (key == sf::Keyboard::Key::A) {
+        turnLeftHeld_ = true;
     } else if (key == sf::Keyboard::Key::D) {
-        simulation_.setDirection({0, 1});
+        turnRightHeld_ = true;
     }
+
+    refreshMovementInput();
 }
 
 void Game::handleKeyReleased(sf::Keyboard::Key key) {
@@ -124,6 +123,18 @@ void Game::handleKeyReleased(sf::Keyboard::Key key) {
         refreshWindowTitle();
     } else if (key == sf::Keyboard::Key::F) {
         fastToggleKeyHeld_ = false;
+    } else if (key == sf::Keyboard::Key::W) {
+        forwardHeld_ = false;
+        refreshMovementInput();
+    } else if (key == sf::Keyboard::Key::S) {
+        backwardHeld_ = false;
+        refreshMovementInput();
+    } else if (key == sf::Keyboard::Key::A) {
+        turnLeftHeld_ = false;
+        refreshMovementInput();
+    } else if (key == sf::Keyboard::Key::D) {
+        turnRightHeld_ = false;
+        refreshMovementInput();
     }
 }
 
@@ -132,11 +143,17 @@ void Game::refreshSpeedMode() {
     simulation_.setSpeedMode(fast ? HerdSpeedMode::Fast : HerdSpeedMode::Slow);
 }
 
+void Game::refreshMovementInput() {
+    simulation_.setMovementInput(forwardHeld_, backwardHeld_, turnLeftHeld_, turnRightHeld_);
+}
+
 void Game::refreshMapRenderMode() {
     renderer_.setMapRenderMode(mapRenderMode_);
 }
 
 void Game::update(float dt) {
+    refreshMovementInput();
+
     if (!paused_) {
         simulation_.update(dt);
     }

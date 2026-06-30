@@ -20,6 +20,7 @@ public:
     [[nodiscard]] bool contains(HexCoord coord) const;
     [[nodiscard]] std::size_t indexOf(HexCoord coord) const;
     [[nodiscard]] sf::Vector2f toPixel(HexCoord coord) const;
+    [[nodiscard]] HexCoord fromPixel(sf::Vector2f pixel) const;
     [[nodiscard]] std::array<HexCoord, 6> neighbors(HexCoord coord) const;
 
     static constexpr std::array<HexCoord, 6> directions() {

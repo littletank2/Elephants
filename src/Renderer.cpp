@@ -26,6 +26,10 @@ sf::Color mix(sf::Color a, sf::Color b, float t) {
     };
 }
 
+float bodyRadiusFor(const Herd& herd) {
+    return std::clamp(9.0F + herd.size * 0.24F, 11.0F, 27.0F);
+}
+
 } // namespace
 
 Renderer::Renderer(const HexGrid& grid)
@@ -201,11 +205,9 @@ void Renderer::drawTiles(sf::RenderWindow& window, const Simulation& simulation,
 
 void Renderer::drawHerd(sf::RenderWindow& window, const Simulation& simulation, sf::Vector2f offset) {
     const Herd& herd = simulation.herd();
-    const sf::Vector2f previousCenter = grid_.toPixel(herd.previousCenter);
-    const sf::Vector2f currentCenter = grid_.toPixel(herd.center);
-    const float progress = std::clamp(herd.moveProgress, 0.0F, 1.0F);
-    const sf::Vector2f center = previousCenter + (currentCenter - previousCenter) * progress + offset;
-    const float bodyRadius = std::clamp(9.0F + herd.size * 0.24F, 11.0F, 27.0F);
+    const sf::Vector2f progressCenter = herd.previousPosition + (herd.position - herd.previousPosition) * std::clamp(herd.moveProgress, 0.0F, 1.0F);
+    const sf::Vector2f center = progressCenter + offset;
+    const float bodyRadius = bodyRadiusFor(herd);
 
     sf::CircleShape shadow(bodyRadius * 1.08F);
     shadow.setOrigin({bodyRadius * 1.08F, bodyRadius * 1.08F});
@@ -221,10 +223,8 @@ void Renderer::drawHerd(sf::RenderWindow& window, const Simulation& simulation, 
     body.setOutlineThickness(2.0F);
     window.draw(body);
 
-    const sf::Vector2f directionPixel = grid_.toPixel(herd.center + herd.direction) - grid_.toPixel(herd.center);
-    const float length = std::max(1.0F, std::sqrt(directionPixel.x * directionPixel.x + directionPixel.y * directionPixel.y));
-    const sf::Vector2f unit = directionPixel / length;
-    const sf::Vector2f trunkPos = center + unit * (bodyRadius * 0.92F);
+    const sf::Vector2f direction = {std::cos(herd.heading), std::sin(herd.heading)};
+    const sf::Vector2f trunkPos = center + direction * (bodyRadius * 0.92F);
 
     sf::CircleShape trunk(bodyRadius * 0.28F);
     trunk.setOrigin({bodyRadius * 0.28F, bodyRadius * 0.28F});

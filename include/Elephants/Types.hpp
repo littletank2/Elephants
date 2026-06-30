@@ -1,5 +1,7 @@
 #pragma once
 
+#include <SFML/System/Vector2.hpp>
+
 #include <compare>
 
 namespace elephants {
@@ -45,9 +47,11 @@ struct Tile {
 };
 
 struct Herd {
+    sf::Vector2f previousPosition{0.0F, 0.0F};
+    sf::Vector2f position{0.0F, 0.0F};
     HexCoord previousCenter{};
     HexCoord center{};
-    HexCoord direction{1, 0};
+    float heading = 0.0F;
     float size = 6.0F;
     float hunger = 1.0F;
     float moveProgress = 1.0F;

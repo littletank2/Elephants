@@ -25,12 +25,14 @@ elephants::HexCoord directionBetween(elephants::HexCoord from, elephants::HexCoo
     return {to.q - from.q, to.r - from.r};
 }
 
-bool choosePassableNeighborDirection(elephants::Simulation& simulation, elephants::HexCoord& destination) {
+bool choosePassableMovementAxis(elephants::Simulation& simulation, elephants::HexCoord& direction) {
     const elephants::HexCoord start = simulation.herd().center;
-    for (elephants::HexCoord candidate : simulation.grid().neighbors(start)) {
-        if (simulation.isPassable(candidate)) {
-            destination = candidate;
-            simulation.setDirection(directionBetween(start, candidate));
+    for (elephants::HexCoord candidate : elephants::HexGrid::directions()) {
+        const elephants::HexCoord forward = start + candidate;
+        const elephants::HexCoord backward = start + candidate * -1;
+        if (simulation.isPassable(forward) && simulation.isPassable(backward)) {
+            direction = candidate;
+            simulation.setDirection(candidate);
             return true;
         }
     }
@@ -56,6 +58,7 @@ void testHexGridRadiusAndNeighbors() {
     const sf::Vector2f origin = grid.toPixel({0, 0});
     require(nearlyEqual(origin.x, 0.0F) && nearlyEqual(origin.y, 0.0F), "origin converts to zero pixel offset");
     require(grid.toPixel({1, 0}).x > origin.x, "positive q moves right on screen");
+    require(grid.fromPixel(grid.toPixel({1, -1})) == elephants::HexCoord{1, -1}, "pixel coordinates round back to the original hex");
 }
 
 void testSimulationInitializesValidWorld() {
@@ -73,17 +76,28 @@ void testSimulationInitializesValidWorld() {
     require(stats.averageVegetation >= 0.0F && stats.averageVegetation <= 1.0F, "average vegetation is normalized");
     require(simulation.isPassable(simulation.herd().center), "herd starts on passable land");
     require(!simulation.statusText().empty(), "status text is available");
+
+    bool variedVegetation = false;
+    const auto& tiles = simulation.tiles();
+    for (std::size_t index = 1; index < tiles.size(); ++index) {
+        if (!nearlyEqual(tiles[0].vegetation, tiles[index].vegetation)) {
+            variedVegetation = true;
+            break;
+        }
+    }
+
+    require(variedVegetation, "initial vegetation varies across tiles");
 }
 
 void testDirectionValidation() {
     elephants::Simulation simulation;
 
-    const elephants::HexCoord initialDirection = simulation.herd().direction;
+    const float initialHeading = simulation.herd().heading;
     simulation.setDirection({2, 0});
-    require(simulation.herd().direction == initialDirection, "invalid direction is ignored");
+    require(nearlyEqual(simulation.herd().heading, initialHeading), "invalid direction is ignored");
 
     simulation.setDirection({0, 1});
-    require(simulation.herd().direction == elephants::HexCoord{0, 1}, "valid direction is accepted");
+    require(!nearlyEqual(simulation.herd().heading, initialHeading), "valid direction updates heading");
 }
 
 void testUpdateConsumesFoodAndKeepsInvariants() {
@@ -129,6 +143,63 @@ void testHerdFootprintScalesWithSize() {
     require(largeSimulation.herdFootprint().size() > 1, "large herd affects a wider front");
 }
 
+void testForwardMovementAdvancesAndEatsGrass() {
+    elephants::SimulationConfig config{};
+    config.mapRadius = 6;
+    config.tickSeconds = 0.01F;
+    config.initialHerdSize = 8.0F;
+    config.victoryForestRatio = -1.0F;
+
+    elephants::Simulation simulation(config);
+    elephants::HexCoord direction{};
+    require(choosePassableMovementAxis(simulation, direction), "test map has a passable movement axis");
+
+    const elephants::HexCoord start = simulation.herd().center;
+    const auto beforeTiles = simulation.tiles();
+    const float hungerBefore = simulation.herd().hunger;
+
+    simulation.setMovementInput(true, false, false, false);
+    simulation.setSpeedMode(elephants::HerdSpeedMode::Slow);
+    simulation.update(config.tickSeconds);
+
+    require(simulation.herd().previousCenter == start, "forward movement records the previous center");
+    require(simulation.herd().center == start + direction, "forward movement advances along the heading");
+    require(simulation.herd().moveProgress >= 0.0F && simulation.herd().moveProgress <= 1.0F, "forward movement progress is normalized");
+    require(simulation.herd().hunger <= hungerBefore, "forward movement does not increase hunger");
+
+    bool tileChanged = false;
+    for (std::size_t index = 0; index < beforeTiles.size(); ++index) {
+        const elephants::Tile& before = beforeTiles[index];
+        const elephants::Tile& after = simulation.tiles()[index];
+        if (!nearlyEqual(before.vegetation, after.vegetation) || !nearlyEqual(before.manure, after.manure) || !nearlyEqual(before.fertility, after.fertility)) {
+            tileChanged = true;
+            break;
+        }
+    }
+
+    require(tileChanged, "forward movement changes ecological tile state");
+}
+
+void testBackwardMovementAdvancesOppositeHeading() {
+    elephants::SimulationConfig config{};
+    config.mapRadius = 6;
+    config.tickSeconds = 0.01F;
+    config.initialHerdSize = 8.0F;
+    config.victoryForestRatio = -1.0F;
+
+    elephants::Simulation simulation(config);
+    elephants::HexCoord direction{};
+    require(choosePassableMovementAxis(simulation, direction), "test map has a passable movement axis");
+
+    const elephants::HexCoord start = simulation.herd().center;
+    simulation.setMovementInput(false, true, false, false);
+    simulation.setSpeedMode(elephants::HerdSpeedMode::Slow);
+    simulation.update(config.tickSeconds);
+
+    require(simulation.herd().previousCenter == start, "backward movement records the previous center");
+    require(simulation.herd().center == start + direction * -1, "backward movement advances opposite the heading");
+}
+
 void testFastModeMovesWithoutEatingGrass() {
     elephants::SimulationConfig config{};
     config.mapRadius = 6;
@@ -137,21 +208,22 @@ void testFastModeMovesWithoutEatingGrass() {
     config.victoryForestRatio = -1.0F;
 
     elephants::Simulation simulation(config);
-    elephants::HexCoord destination{};
-    require(choosePassableNeighborDirection(simulation, destination), "test map has a passable neighboring cell");
+    elephants::HexCoord direction{};
+    require(choosePassableMovementAxis(simulation, direction), "test map has a passable movement axis");
 
     const elephants::HexCoord start = simulation.herd().center;
     const auto beforeTiles = simulation.tiles();
     const float hungerBefore = simulation.herd().hunger;
     const float sizeBefore = simulation.herd().size;
 
+    simulation.setMovementInput(true, false, false, false);
     simulation.setSpeedMode(elephants::HerdSpeedMode::Fast);
     require(simulation.speedMode() == elephants::HerdSpeedMode::Fast, "fast speed mode is accepted");
 
     simulation.update(config.fastTickSeconds);
 
     require(simulation.herd().previousCenter == start, "fast movement records the previous center");
-    require(simulation.herd().center == destination, "fast movement advances to the selected passable neighbor");
+    require(simulation.herd().center == start + direction, "fast movement advances to the selected passable hex");
     require(simulation.herd().moveProgress >= 0.0F && simulation.herd().moveProgress <= 1.0F, "fast movement progress is normalized");
     require(nearlyEqual(simulation.stats().herdFoodRatio, 0.0F), "fast movement reports no eaten food");
     require(simulation.herd().hunger < hungerBefore, "fast movement lowers hunger when no food is eaten");
@@ -173,20 +245,21 @@ void testSlowModeMovesForwardAndEatsGrass() {
     config.victoryForestRatio = -1.0F;
 
     elephants::Simulation simulation(config);
-    elephants::HexCoord destination{};
-    require(choosePassableNeighborDirection(simulation, destination), "test map has a passable neighboring cell");
+    elephants::HexCoord direction{};
+    require(choosePassableMovementAxis(simulation, direction), "test map has a passable movement axis");
 
     const elephants::HexCoord start = simulation.herd().center;
     const auto beforeTiles = simulation.tiles();
     const float hungerBefore = simulation.herd().hunger;
 
+    simulation.setMovementInput(true, false, false, false);
     simulation.setSpeedMode(elephants::HerdSpeedMode::Slow);
     require(simulation.speedMode() == elephants::HerdSpeedMode::Slow, "slow speed mode is accepted");
 
     simulation.update(config.tickSeconds);
 
     require(simulation.herd().previousCenter == start, "slow movement records the previous center");
-    require(simulation.herd().center == destination, "slow movement advances to the selected passable neighbor");
+    require(simulation.herd().center == start + direction, "slow movement advances to the selected passable hex");
     require(simulation.herd().moveProgress >= 0.0F && simulation.herd().moveProgress <= 1.0F, "slow movement progress is normalized");
     require(simulation.herd().hunger <= hungerBefore, "slow movement does not increase hunger");
 
@@ -211,18 +284,19 @@ void testHerdMovementProgressInterpolatesBetweenSteps() {
     config.victoryForestRatio = -1.0F;
 
     elephants::Simulation simulation(config);
-    elephants::HexCoord destination{};
-    require(choosePassableNeighborDirection(simulation, destination), "test map has a passable neighboring cell");
+    elephants::HexCoord direction{};
+    require(choosePassableMovementAxis(simulation, direction), "test map has a passable movement axis");
 
+    simulation.setMovementInput(true, false, false, false);
     const elephants::HexCoord start = simulation.herd().center;
     simulation.update(config.tickSeconds);
 
     require(simulation.herd().previousCenter == start, "movement records the previous center");
-    require(simulation.herd().center == destination, "movement advances to the selected passable neighbor");
+    require(simulation.herd().center == start + direction, "movement advances to the selected passable hex");
     require(nearlyEqual(simulation.herd().moveProgress, 0.0F), "movement progress resets after a logical step");
 
     simulation.update(config.tickSeconds * 0.5F);
-    require(simulation.herd().center == destination, "partial update does not advance another logical step");
+    require(simulation.herd().center == start + direction, "partial update does not advance another logical step");
     require(nearlyEqual(simulation.herd().moveProgress, 0.5F), "movement progress advances between logical steps");
 }
 
@@ -253,6 +327,8 @@ int main() {
         {"Direction validation", testDirectionValidation},
         {"Update consumes food and keeps invariants", testUpdateConsumesFoodAndKeepsInvariants},
         {"Herd footprint scales with size", testHerdFootprintScalesWithSize},
+        {"Forward movement advances and eats grass", testForwardMovementAdvancesAndEatsGrass},
+        {"Backward movement advances opposite heading", testBackwardMovementAdvancesOppositeHeading},
         {"Fast mode moves without eating grass", testFastModeMovesWithoutEatingGrass},
         {"Slow mode moves forward and eats grass", testSlowModeMovesForwardAndEatsGrass},
         {"Herd movement progress interpolates between steps", testHerdMovementProgressInterpolatesBetweenSteps},
@@ -278,3 +354,4 @@ int main() {
     std::cout << tests.size() << " test(s) passed\n";
     return 0;
 }
+

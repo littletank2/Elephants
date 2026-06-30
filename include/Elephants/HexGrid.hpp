@@ -2,6 +2,7 @@
 
 #include "Elephants/Types.hpp"
 
+#include <SFML/Graphics/Rect.hpp>
 #include <SFML/System/Vector2.hpp>
 
 #include <array>
@@ -21,6 +22,7 @@ public:
     [[nodiscard]] std::size_t indexOf(HexCoord coord) const;
     [[nodiscard]] sf::Vector2f toPixel(HexCoord coord) const;
     [[nodiscard]] HexCoord fromPixel(sf::Vector2f pixel) const;
+    [[nodiscard]] sf::FloatRect pixelBounds() const;
     [[nodiscard]] std::array<HexCoord, 6> neighbors(HexCoord coord) const;
 
     static constexpr std::array<HexCoord, 6> directions() {

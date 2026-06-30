@@ -6,6 +6,7 @@
 #include <numeric>
 #include <random>
 #include <sstream>
+#include <cstdint>
 
 namespace elephants {
 namespace {
@@ -45,6 +46,7 @@ Simulation::Simulation(SimulationConfig config)
 
 void Simulation::reset() {
     tiles_.assign(grid_.coords().size(), {});
+    explored_.assign(grid_.coords().size(), 0);
     result_ = GameResult::Running;
     accumulator_ = 0.0F;
     lastFoodRatio_ = 1.0F;
@@ -54,6 +56,7 @@ void Simulation::reset() {
     turnRightHeld_ = false;
     generateMap();
     placeHerd();
+    markExplored(herdFootprint());
 }
 
 void Simulation::update(float dt) {
@@ -166,6 +169,14 @@ bool Simulation::isPassable(HexCoord coord) const {
     return !isWaterLike(tiles_[grid_.indexOf(coord)].terrain);
 }
 
+bool Simulation::isExplored(HexCoord coord) const {
+    if (!grid_.contains(coord)) {
+        return false;
+    }
+
+    return explored_[grid_.indexOf(coord)] != 0;
+}
+
 std::vector<HexCoord> Simulation::herdFootprint() const {
     return footprintFor(herd_.position);
 }
@@ -235,6 +246,7 @@ void Simulation::placeHerd() {
 
 void Simulation::step() {
     moveHerd();
+    markExplored(footprintFor(herd_.position));
     if (herd_.speedMode == HerdSpeedMode::Slow) {
         feedHerd();
     } else {
@@ -466,6 +478,15 @@ float Simulation::currentTickSeconds() const {
     return std::max(0.001F, configured);
 }
 
+void Simulation::markExplored(const std::vector<HexCoord>& coords) {
+    for (HexCoord coord : coords) {
+        if (!grid_.contains(coord)) {
+            continue;
+        }
+
+        explored_[grid_.indexOf(coord)] = 1;
+    }
+}
 std::vector<HexCoord> Simulation::footprintFor(const sf::Vector2f& position) const {
     std::vector<HexCoord> coords;
     const float bodyRadius = bodyRadiusFor(herd_);
@@ -519,5 +540,7 @@ sf::Vector2f Simulation::headingVector() const {
 }
 
 } // namespace elephants
+
+
 
 

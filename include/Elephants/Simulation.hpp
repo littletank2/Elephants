@@ -3,6 +3,7 @@
 #include "Elephants/HexGrid.hpp"
 #include "Elephants/Types.hpp"
 
+#include <cstdint>
 #include <random>
 #include <string>
 #include <vector>
@@ -16,7 +17,7 @@ enum class GameResult {
 };
 
 struct SimulationConfig {
-    int mapRadius = 15;
+    int mapRadius = 22;
     float hexSize = 23.0F;
     float tickSeconds = 0.22F;
     float fastTickSeconds = 0.10F;
@@ -69,6 +70,7 @@ public:
     [[nodiscard]] SimulationStats stats() const;
     [[nodiscard]] std::string statusText() const;
     [[nodiscard]] bool isPassable(HexCoord coord) const;
+    [[nodiscard]] bool isExplored(HexCoord coord) const;
     [[nodiscard]] std::vector<HexCoord> herdFootprint() const;
 
 private:
@@ -80,6 +82,7 @@ private:
     void applyFoodRatio(float foodRatio);
     void regenerateTiles();
     void updateResult();
+    void markExplored(const std::vector<HexCoord>& coords);
 
     [[nodiscard]] Tile makeTile(HexCoord coord);
     [[nodiscard]] float maxVegetation(const Tile& tile) const;
@@ -95,6 +98,7 @@ private:
     SimulationConfig config_;
     HexGrid grid_;
     std::vector<Tile> tiles_;
+    std::vector<std::uint8_t> explored_;
     Herd herd_;
     GameResult result_ = GameResult::Running;
     float accumulator_ = 0.0F;

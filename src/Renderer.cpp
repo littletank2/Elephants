@@ -39,18 +39,18 @@ void Renderer::setMapRenderMode(MapRenderMode mode) {
     mapRenderMode_ = mode;
 }
 
-void Renderer::draw(sf::RenderWindow& window, const Simulation& simulation, bool paused) {
-    const sf::Vector2f offset = boardCenterOffset(window.getSize());
+void Renderer::draw(sf::RenderWindow& window, const Simulation& simulation, bool paused, const sf::View& worldView) {
+    const sf::View previousView = window.getView();
+
+    window.setView(worldView);
+    const sf::Vector2f offset{0.0F, 0.0F};
     drawTiles(window, simulation, offset);
     drawHerd(window, simulation, offset);
-    drawHud(window, simulation, paused);
-}
 
-sf::Vector2f Renderer::boardCenterOffset(sf::Vector2u windowSize) const {
-    return {
-        static_cast<float>(windowSize.x) * 0.5F,
-        static_cast<float>(windowSize.y) * 0.54F,
-    };
+    window.setView(window.getDefaultView());
+    drawHud(window, simulation, paused, worldView);
+
+    window.setView(previousView);
 }
 
 sf::ConvexShape Renderer::makeHex(sf::Vector2f center, float radius) const {
@@ -172,6 +172,15 @@ sf::Color Renderer::hsvColor(float hue, float saturation, float value, std::uint
     };
 }
 
+sf::Vector2f Renderer::minimapPoint(const sf::FloatRect& worldBounds, sf::Vector2f worldPoint, sf::Vector2f minimapTopLeft, sf::Vector2f minimapSize) const {
+    const float normalizedX = std::clamp((worldPoint.x - worldBounds.position.x) / std::max(0.001F, worldBounds.size.x), 0.0F, 1.0F);
+    const float normalizedY = std::clamp((worldPoint.y - worldBounds.position.y) / std::max(0.001F, worldBounds.size.y), 0.0F, 1.0F);
+    return {
+        minimapTopLeft.x + normalizedX * minimapSize.x,
+        minimapTopLeft.y + normalizedY * minimapSize.y,
+    };
+}
+
 void Renderer::drawTiles(sf::RenderWindow& window, const Simulation& simulation, sf::Vector2f offset) {
     const auto& tiles = simulation.tiles();
     const auto footprint = simulation.herdFootprint();
@@ -233,7 +242,7 @@ void Renderer::drawHerd(sf::RenderWindow& window, const Simulation& simulation, 
     window.draw(trunk);
 }
 
-void Renderer::drawHud(sf::RenderWindow& window, const Simulation& simulation, bool paused) {
+void Renderer::drawHud(sf::RenderWindow& window, const Simulation& simulation, bool paused, const sf::View& worldView) {
     const SimulationStats currentStats = simulation.stats();
 
     sf::RectangleShape panel({318.0F, 58.0F});
@@ -256,6 +265,94 @@ void Renderer::drawHud(sf::RenderWindow& window, const Simulation& simulation, b
         marker.setOutlineThickness(2.0F);
         window.draw(marker);
     }
+
+    drawMinimap(window, simulation, worldView);
+}
+
+void Renderer::drawMinimap(sf::RenderWindow& window, const Simulation& simulation, const sf::View& worldView) {
+    const sf::FloatRect worldBounds = grid_.pixelBounds();
+    const sf::Vector2u windowSize = window.getSize();
+
+    const sf::Vector2f panelSize{236.0F, 236.0F};
+    const sf::Vector2f panelPos{
+        static_cast<float>(windowSize.x) - panelSize.x - 18.0F,
+        18.0F,
+    };
+    const sf::Vector2f contentPos = panelPos + sf::Vector2f{10.0F, 10.0F};
+    const sf::Vector2f contentSize = panelSize - sf::Vector2f{20.0F, 20.0F};
+
+    sf::RectangleShape panel(panelSize);
+    panel.setPosition(panelPos);
+    panel.setFillColor({14, 19, 17, 185});
+    panel.setOutlineColor({220, 212, 178, 135});
+    panel.setOutlineThickness(1.0F);
+    window.draw(panel);
+
+    sf::RectangleShape content(contentSize);
+    content.setPosition(contentPos);
+    content.setFillColor({24, 31, 28, 215});
+    content.setOutlineColor({78, 92, 84, 180});
+    content.setOutlineThickness(1.0F);
+    window.draw(content);
+
+    const auto& tiles = simulation.tiles();
+    sf::RectangleShape cell({2.8F, 2.8F});
+    cell.setOrigin({1.4F, 1.4F});
+
+    for (std::size_t i = 0; i < grid_.coords().size(); ++i) {
+        const HexCoord coord = grid_.coords()[i];
+        const Tile& tile = tiles[i];
+        const sf::Vector2f center = minimapPoint(worldBounds, grid_.toPixel(coord), contentPos, contentSize);
+        sf::Color color = mapRenderMode_ == MapRenderMode::GrassHue ? grassHueColor(tile) : tileColor(tile);
+
+        if (!simulation.isExplored(coord)) {
+            color = mix(color, sf::Color(12, 15, 14, 255), 0.62F);
+            color.a = 108;
+        }
+
+        cell.setPosition(center);
+        cell.setFillColor(color);
+        window.draw(cell);
+    }
+
+    const sf::Vector2f herdPos = minimapPoint(worldBounds, simulation.herd().position, contentPos, contentSize);
+    sf::CircleShape herd(4.0F);
+    herd.setOrigin({4.0F, 4.0F});
+    herd.setPosition(herdPos);
+    herd.setFillColor({246, 232, 148});
+    herd.setOutlineColor({20, 27, 23, 220});
+    herd.setOutlineThickness(1.0F);
+    window.draw(herd);
+
+    const sf::Vector2f direction{
+        std::cos(simulation.herd().heading),
+        std::sin(simulation.herd().heading),
+    };
+    const sf::Vector2f perpendicular{-direction.y, direction.x};
+    const sf::Vector2f arrowTip = herdPos + direction * 10.0F;
+    const sf::Vector2f arrowBase = herdPos - direction * 4.0F;
+
+    sf::ConvexShape headingArrow;
+    headingArrow.setPointCount(3);
+    headingArrow.setPoint(0, arrowTip);
+    headingArrow.setPoint(1, arrowBase + perpendicular * 4.0F);
+    headingArrow.setPoint(2, arrowBase - perpendicular * 4.0F);
+    headingArrow.setFillColor({246, 232, 148, 210});
+    headingArrow.setOutlineColor({20, 27, 23, 220});
+    headingArrow.setOutlineThickness(1.0F);
+    window.draw(headingArrow);
+
+    const sf::Vector2f viewTopLeft = worldView.getCenter() - worldView.getSize() * 0.5F;
+    const sf::Vector2f viewBottomRight = worldView.getCenter() + worldView.getSize() * 0.5F;
+    const sf::Vector2f viewTopLeftMini = minimapPoint(worldBounds, viewTopLeft, contentPos, contentSize);
+    const sf::Vector2f viewBottomRightMini = minimapPoint(worldBounds, viewBottomRight, contentPos, contentSize);
+
+    sf::RectangleShape viewport(viewBottomRightMini - viewTopLeftMini);
+    viewport.setPosition(viewTopLeftMini);
+    viewport.setFillColor({246, 232, 148, 26});
+    viewport.setOutlineColor({246, 232, 148, 220});
+    viewport.setOutlineThickness(2.0F);
+    window.draw(viewport);
 }
 
 void Renderer::drawBar(sf::RenderWindow& window, sf::Vector2f position, sf::Vector2f size, float value, sf::Color fill) {
@@ -273,3 +370,9 @@ void Renderer::drawBar(sf::RenderWindow& window, sf::Vector2f position, sf::Vect
 }
 
 } // namespace elephants
+
+
+
+
+
+

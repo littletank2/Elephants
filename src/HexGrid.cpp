@@ -91,6 +91,28 @@ sf::Vector2f HexGrid::toPixel(HexCoord coord) const {
     return {x, y};
 }
 
+sf::FloatRect HexGrid::pixelBounds() const {
+    if (coords_.empty()) {
+        return {};
+    }
+
+    float minX = toPixel(coords_.front()).x;
+    float maxX = minX;
+    float minY = toPixel(coords_.front()).y;
+    float maxY = minY;
+
+    for (HexCoord coord : coords_) {
+        const sf::Vector2f pixel = toPixel(coord);
+        minX = std::min(minX, pixel.x);
+        maxX = std::max(maxX, pixel.x);
+        minY = std::min(minY, pixel.y);
+        maxY = std::max(maxY, pixel.y);
+    }
+
+    const float padding = hexSize_;
+    return {{minX - padding, minY - padding}, {(maxX - minX) + padding * 2.0F, (maxY - minY) + padding * 2.0F}};
+}
+
 HexCoord HexGrid::fromPixel(sf::Vector2f pixel) const {
     const float q = (sqrt3 / 3.0F * pixel.x - pixel.y / 3.0F) / hexSize_;
     const float r = (2.0F / 3.0F * pixel.y) / hexSize_;

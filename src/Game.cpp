@@ -6,6 +6,7 @@
 #include <SFML/Window/VideoMode.hpp>
 
 #include <optional>
+#include <string>
 
 namespace elephants {
 
@@ -14,6 +15,7 @@ Game::Game()
     , simulation_()
     , renderer_(simulation_.grid()) {
     window_.setFramerateLimit(60);
+    refreshMapRenderMode();
     refreshWindowTitle();
 }
 
@@ -74,6 +76,13 @@ void Game::handleKeyPressed(sf::Keyboard::Key key) {
         return;
     }
 
+    if (key == sf::Keyboard::Key::M) {
+        mapRenderMode_ = mapRenderMode_ == MapRenderMode::Terrain ? MapRenderMode::GrassHue : MapRenderMode::Terrain;
+        refreshMapRenderMode();
+        refreshWindowTitle();
+        return;
+    }
+
     if (key == sf::Keyboard::Key::Space) {
         paused_ = !paused_;
         refreshWindowTitle();
@@ -83,6 +92,7 @@ void Game::handleKeyPressed(sf::Keyboard::Key key) {
     if (key == sf::Keyboard::Key::R) {
         simulation_.reset();
         refreshSpeedMode();
+        refreshMapRenderMode();
         paused_ = false;
         refreshWindowTitle();
         return;
@@ -122,6 +132,10 @@ void Game::refreshSpeedMode() {
     simulation_.setSpeedMode(fast ? HerdSpeedMode::Fast : HerdSpeedMode::Slow);
 }
 
+void Game::refreshMapRenderMode() {
+    renderer_.setMapRenderMode(mapRenderMode_);
+}
+
 void Game::update(float dt) {
     if (!paused_) {
         simulation_.update(dt);
@@ -142,6 +156,8 @@ void Game::render() {
 
 void Game::refreshWindowTitle() {
     std::string title = "Elephants - " + simulation_.statusText();
+    title += mapRenderMode_ == MapRenderMode::Terrain ? " | MAP TERRAIN" : " | MAP GRASS HUE";
+
     if (paused_) {
         title += " - PAUSED";
     }

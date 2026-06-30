@@ -19,6 +19,7 @@ private:
     void handleKeyPressed(sf::Keyboard::Key key);
     void handleKeyReleased(sf::Keyboard::Key key);
     void refreshSpeedMode();
+    void refreshMapRenderMode();
     void update(float dt);
     void render();
     void refreshWindowTitle();
@@ -31,6 +32,7 @@ private:
     bool rightShiftHeld_ = false;
     bool fastToggled_ = false;
     bool fastToggleKeyHeld_ = false;
+    MapRenderMode mapRenderMode_ = MapRenderMode::Terrain;
     float titleRefreshTimer_ = 0.0F;
 };
 

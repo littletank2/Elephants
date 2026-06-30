@@ -165,6 +165,44 @@ void testFastModeMovesWithoutEatingGrass() {
     }
 }
 
+void testSlowModeMovesForwardAndEatsGrass() {
+    elephants::SimulationConfig config{};
+    config.mapRadius = 6;
+    config.tickSeconds = 0.01F;
+    config.initialHerdSize = 8.0F;
+    config.victoryForestRatio = -1.0F;
+
+    elephants::Simulation simulation(config);
+    elephants::HexCoord destination{};
+    require(choosePassableNeighborDirection(simulation, destination), "test map has a passable neighboring cell");
+
+    const elephants::HexCoord start = simulation.herd().center;
+    const auto beforeTiles = simulation.tiles();
+    const float hungerBefore = simulation.herd().hunger;
+
+    simulation.setSpeedMode(elephants::HerdSpeedMode::Slow);
+    require(simulation.speedMode() == elephants::HerdSpeedMode::Slow, "slow speed mode is accepted");
+
+    simulation.update(config.tickSeconds);
+
+    require(simulation.herd().previousCenter == start, "slow movement records the previous center");
+    require(simulation.herd().center == destination, "slow movement advances to the selected passable neighbor");
+    require(simulation.herd().moveProgress >= 0.0F && simulation.herd().moveProgress <= 1.0F, "slow movement progress is normalized");
+    require(simulation.herd().hunger <= hungerBefore, "slow movement does not increase hunger");
+
+    bool tileChanged = false;
+    for (std::size_t index = 0; index < beforeTiles.size(); ++index) {
+        const elephants::Tile& before = beforeTiles[index];
+        const elephants::Tile& after = simulation.tiles()[index];
+        if (!nearlyEqual(before.vegetation, after.vegetation) || !nearlyEqual(before.manure, after.manure) || !nearlyEqual(before.fertility, after.fertility)) {
+            tileChanged = true;
+            break;
+        }
+    }
+
+    require(tileChanged, "slow movement changes ecological tile state");
+}
+
 void testHerdMovementProgressInterpolatesBetweenSteps() {
     elephants::SimulationConfig config{};
     config.mapRadius = 6;
@@ -216,6 +254,7 @@ int main() {
         {"Update consumes food and keeps invariants", testUpdateConsumesFoodAndKeepsInvariants},
         {"Herd footprint scales with size", testHerdFootprintScalesWithSize},
         {"Fast mode moves without eating grass", testFastModeMovesWithoutEatingGrass},
+        {"Slow mode moves forward and eats grass", testSlowModeMovesForwardAndEatsGrass},
         {"Herd movement progress interpolates between steps", testHerdMovementProgressInterpolatesBetweenSteps},
         {"Victory threshold can end game", testVictoryThresholdCanEndGame},
     };

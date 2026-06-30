@@ -31,6 +31,10 @@ sf::Color mix(sf::Color a, sf::Color b, float t) {
 Renderer::Renderer(const HexGrid& grid)
     : grid_(grid) {}
 
+void Renderer::setMapRenderMode(MapRenderMode mode) {
+    mapRenderMode_ = mode;
+}
+
 void Renderer::draw(sf::RenderWindow& window, const Simulation& simulation, bool paused) {
     const sf::Vector2f offset = boardCenterOffset(window.getSize());
     drawTiles(window, simulation, offset);
@@ -76,11 +80,92 @@ sf::Color Renderer::tileColor(const Tile& tile) const {
     return sf::Color::Magenta;
 }
 
-sf::Color Renderer::vegetationOverlay(const Tile& tile) const {
-    const float amount = std::clamp(tile.vegetation / 10.0F, 0.0F, 1.0F);
+float Renderer::vegetationCapacity(const Tile& tile) const {
+    switch (tile.terrain) {
+    case TerrainType::Forest:
+        return 7.2F + tile.fertility * 2.6F;
+    case TerrainType::Grassland:
+        return 8.5F + tile.fertility * 4.2F;
+    case TerrainType::DryGrassland:
+        return 4.5F + tile.fertility * 2.3F;
+    case TerrainType::Water:
+        return 0.0F;
+    case TerrainType::Desert:
+        return 1.0F + tile.fertility * 1.1F;
+    case TerrainType::Swamp:
+        return 5.5F + tile.fertility * 2.2F;
+    }
+
+    return 0.0F;
+}
+
+float Renderer::vegetationRatio(const Tile& tile) const {
+    return std::clamp(tile.vegetation / std::max(0.01F, vegetationCapacity(tile)), 0.0F, 1.0F);
+}
+
+sf::Color Renderer::vegetationColor(const Tile& tile) const {
+    const float amount = vegetationRatio(tile);
     const sf::Color low(85, 73, 47, 155);
     const sf::Color high(48, 150, 65, 170);
     return mix(low, high, amount);
+}
+
+sf::Color Renderer::grassHueColor(const Tile& tile) const {
+    if (tile.terrain == TerrainType::Water) {
+        return tileColor(tile);
+    }
+
+    const float amount = vegetationRatio(tile);
+    const float hue = 0.0F + amount * 120.0F;
+    const float saturation = 0.92F;
+    const float value = 0.48F + amount * 0.42F;
+    return hsvColor(hue, saturation, value, 235);
+}
+
+sf::Color Renderer::hsvColor(float hue, float saturation, float value, std::uint8_t alpha) const {
+    hue = std::fmod(hue, 360.0F);
+    if (hue < 0.0F) {
+        hue += 360.0F;
+    }
+
+    saturation = std::clamp(saturation, 0.0F, 1.0F);
+    value = std::clamp(value, 0.0F, 1.0F);
+
+    const float chroma = value * saturation;
+    const float huePrime = hue / 60.0F;
+    const float x = chroma * (1.0F - std::fabs(std::fmod(huePrime, 2.0F) - 1.0F));
+    const float m = value - chroma;
+
+    float r = 0.0F;
+    float g = 0.0F;
+    float b = 0.0F;
+
+    if (huePrime < 1.0F) {
+        r = chroma;
+        g = x;
+    } else if (huePrime < 2.0F) {
+        r = x;
+        g = chroma;
+    } else if (huePrime < 3.0F) {
+        g = chroma;
+        b = x;
+    } else if (huePrime < 4.0F) {
+        g = x;
+        b = chroma;
+    } else if (huePrime < 5.0F) {
+        r = x;
+        b = chroma;
+    } else {
+        r = chroma;
+        b = x;
+    }
+
+    return {
+        static_cast<std::uint8_t>(std::clamp((r + m) * 255.0F, 0.0F, 255.0F)),
+        static_cast<std::uint8_t>(std::clamp((g + m) * 255.0F, 0.0F, 255.0F)),
+        static_cast<std::uint8_t>(std::clamp((b + m) * 255.0F, 0.0F, 255.0F)),
+        alpha,
+    };
 }
 
 void Renderer::drawTiles(sf::RenderWindow& window, const Simulation& simulation, sf::Vector2f offset) {
@@ -93,14 +178,14 @@ void Renderer::drawTiles(sf::RenderWindow& window, const Simulation& simulation,
         const sf::Vector2f center = grid_.toPixel(coord) + offset;
 
         sf::ConvexShape base = makeHex(center, grid_.hexSize() - 1.0F);
-        base.setFillColor(tileColor(tile));
+        base.setFillColor(mapRenderMode_ == MapRenderMode::GrassHue ? grassHueColor(tile) : tileColor(tile));
         base.setOutlineColor({20, 27, 23, 210});
         base.setOutlineThickness(1.2F);
         window.draw(base);
 
-        if (tile.terrain != TerrainType::Water) {
-            sf::ConvexShape vegetation = makeHex(center, (grid_.hexSize() - 7.0F) * std::clamp(tile.vegetation / 10.0F, 0.2F, 1.0F));
-            vegetation.setFillColor(vegetationOverlay(tile));
+        if (mapRenderMode_ == MapRenderMode::Terrain && tile.terrain != TerrainType::Water) {
+            sf::ConvexShape vegetation = makeHex(center, (grid_.hexSize() - 7.0F) * std::clamp(vegetationRatio(tile), 0.2F, 1.0F));
+            vegetation.setFillColor(vegetationColor(tile));
             window.draw(vegetation);
         }
 

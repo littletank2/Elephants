@@ -24,6 +24,7 @@ If you use a different vcpkg location, either set `VCPKG_ROOT` and use `ninja-vc
 - `Q`, `W`, `E`, `A`, `S`, `D`: choose one of the six hex directions.
 - Hold `Shift`: move fast without eating grass.
 - `F`: toggle fast movement on/off.
+- `M`: toggle terrain view / grass-hue map view.
 - `Space`: pause/resume.
 - `R`: regenerate the world.
 - `Esc`: quit.
